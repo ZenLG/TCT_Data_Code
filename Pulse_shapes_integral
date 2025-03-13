@@ -1,0 +1,89 @@
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Define the directory containing the data files
+data_dir = r"C:/Users/miles/APD/TCT/3.12.25/65"
+
+# Dictionary to store plots for sorting
+plot_data = {}
+integral_data = {}  # Store integral values over time
+R = 50  # Resistance in ohms
+
+# Define integration bounds
+integral_start = 50  # Start time in ns
+integral_end = 73    # End time in ns
+
+# Define time bounds for plots
+current_time_start = 0
+current_time_end = 25
+
+# Loop through each file in the directory
+for filename in sorted(os.listdir(data_dir), reverse=True):  # Sort in descending order
+    if filename.endswith(".txt"):  # Ensure we only process text files
+        voltage = filename.replace("V.txt", "")  # Extract voltage from filename
+        try:
+            voltage = int(voltage)  # Convert to integer for proper sorting
+        except ValueError:
+            continue  # Skip files that don't follow the naming convention
+
+        filepath = os.path.join(data_dir, filename)
+        
+        # Read data
+        with open(filepath, "r") as file:
+            lines = file.readlines()
+        
+        # Extract data while skipping the first two rows (header)
+        time, signal = [], []
+        for line in lines[2:]:  # Skip the first two rows
+            parts = line.strip().split("\t")
+            if len(parts) == 2:
+                t, v = map(float, parts)
+                time.append(t)
+                signal.append(v)
+        
+        # Convert voltage to current
+        signal = np.array(signal) - np.mean(signal[:10])  # Apply pedestal offset correction
+        current = signal / R
+        
+        # Store data for plotting in sorted order
+        plot_data[voltage] = (np.array(time), current)
+
+        # Compute integral over time within defined bounds
+        mask = (np.array(time) >= integral_start) & (np.array(time) <= integral_end)
+        time_masked = np.array(time)[mask]
+        current_masked = np.array(current)[mask]
+        integral_over_time = np.cumsum(current_masked * np.diff(time_masked, prepend=time_masked[0]))
+        integral_data[voltage] = (time_masked - integral_start, integral_over_time)
+
+# First Plot: Current vs Time
+plt.figure(figsize=(10, 6))
+for voltage in sorted(plot_data.keys(), reverse=True):
+    time, current = plot_data[voltage]
+    
+    # Adjust the time axis by subtracting 50 (so that time starts from zero)
+    adjusted_time = time - 50
+    plt.plot(adjusted_time, current, linestyle='-', linewidth=0.9, label=f"{voltage}V")
+
+plt.xlabel("Time [ns] (Relative to 50 ns)")
+plt.xlim(current_time_start, current_time_end)  # Use defined bounds
+plt.ylabel("Current [mA]")
+plt.title("TCT Pulses (65%) - Current vs Time")
+plt.legend(title="Voltage", loc="upper right")
+plt.grid()
+plt.show()
+
+# Second Plot: Integral of Current vs Time
+plt.figure(figsize=(10, 6))
+for voltage in sorted(integral_data.keys(), reverse=True):
+    time, integral_over_time = integral_data[voltage]
+    
+    plt.plot(time, integral_over_time, linestyle='-', linewidth=0.9, label=f"{voltage}V")
+
+plt.xlabel("Time [ns]")
+plt.xlim(0, integral_end - integral_start)
+plt.ylabel("Integrated Current [mA*ns]")
+plt.title("Integrated Current vs Time (65%) - Offset")
+plt.legend(title="Voltage", loc="upper left")
+plt.grid()
+plt.show()
